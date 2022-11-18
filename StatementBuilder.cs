@@ -4,6 +4,11 @@ using Microsoft.Data.SqlClient;
 public static class StatementBuilder
 {
 
+    //This is a hack to solve a very specific problem, could probably be generalized to the parameters
+    public static readonly HashSet<(string, string)> sensitiveColumns = new HashSet<(string, string)>{
+        ("CoatingComponent", "CoatingComponentDescription")
+    };
+
     public static IEnumerable<ColumnInfo> GetColumnInfo(string table, SqlConnection connection)
     {
 
@@ -101,7 +106,14 @@ public static class StatementBuilder
                     if (columnInfo.DataType == typeof(string))
                     {
                         sb.Append("'");
-                        sb.Append(((string)value).Replace("'", "''"));
+                        if (sensitiveColumns.Contains((table, columnInfo.ColumnName)))
+                        {
+                            sb.Append("OBFUSCATED");
+                        }
+                        else
+                        {
+                            sb.Append(((string)value).Replace("'", "''"));
+                        }
                         sb.Append("'");
                     }
                     else if (columnInfo.DataType == typeof(DateTime))

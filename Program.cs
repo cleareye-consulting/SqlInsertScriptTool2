@@ -1,13 +1,12 @@
 ﻿using Microsoft.Data.SqlClient;
 
 Arguments arguments = Utilities.GetCommandLineArgs<Arguments>(args) ?? throw new ArgumentException("Unable to create arguments", nameof(args));
-string password = Utilities.GetPasswordFromConsole();
 
 SqlConnectionStringBuilder connectionStringBuilder = new();
 connectionStringBuilder.DataSource = arguments.Port != default ? $"{arguments.Server}:{arguments.Port}" : arguments.Server;
 connectionStringBuilder.InitialCatalog = arguments.Database;
 connectionStringBuilder.UserID = arguments.UserId;
-connectionStringBuilder.Password = password;
+connectionStringBuilder.Password = arguments.Password;
 connectionStringBuilder.Encrypt = false; //https://github.com/dotnet/SqlClient/issues/1479
 connectionStringBuilder.TrustServerCertificate = true;
 
