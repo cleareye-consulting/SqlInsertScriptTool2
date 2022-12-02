@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 static class Utilities
 {
 
-    private static Regex flagPattern = new(@"^-(\p{Ll}\p{L}+)$");
+    private static Regex flagPattern = new(@"^--(\p{Ll}\p{L}+)$");
 
     public static T? GetCommandLineArgs<T>(string[] args)
     {
@@ -29,7 +29,7 @@ static class Utilities
             Match flagMatch = flagPattern.Match(flag);
             if (!flagMatch.Success)
             {
-                throw new ArgumentException("Odd-numbered arguments must be camel-cased identifiers prefixed with -", nameof(args));
+                throw new ArgumentException("Odd-numbered arguments must be camel-cased identifiers prefixed with --", nameof(args));
             }
             string key = UpperCaseInitialLetter(flagMatch.Groups[1].Value);
             string valueAsString = args[argIndex++];

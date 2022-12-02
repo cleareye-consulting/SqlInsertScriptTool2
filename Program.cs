@@ -13,16 +13,25 @@ connectionStringBuilder.TrustServerCertificate = true;
 using SqlConnection cn = new(connectionStringBuilder.ConnectionString);
 cn.Open();
 
-foreach (string table in arguments.Tables.Reverse())
+if (arguments.IncludeDeletes)
 {
-    Console.WriteLine($"delete {table}");
+    foreach (string table in arguments.Tables.Reverse())
+    {
+        Console.WriteLine($"delete {table}");
+    }
+}
+
+using StatementBuilder builder = StatementBuilder.GetInstance(arguments.SourceMode, cn);
+
+if (builder is CsvSourcedStatementBuilder csvBuilder)
+{
+    csvBuilder.CSVDirectoryPath = arguments.CsvDirectory; //This is a little hacky but simpler than the alternatives, I think
 }
 
 foreach (string table in arguments.Tables)
 {
-    IEnumerable<ColumnInfo> columnInfos = StatementBuilder.GetColumnInfo(table, cn);
-    string select = StatementBuilder.GetSelectStatement(table, columnInfos, cn);
-    foreach (string insertStatement in StatementBuilder.GetInsertStatements(table, select, columnInfos, cn))
+    IEnumerable<ColumnInfo> columnInfos = builder.GetColumnInfo(table);
+    foreach (string insertStatement in builder.GetInsertStatements(table, columnInfos))
     {
         Console.WriteLine(insertStatement);
     }

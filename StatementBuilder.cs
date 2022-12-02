@@ -1,15 +1,35 @@
 using System.Text;
 using Microsoft.Data.SqlClient;
 
-public static class StatementBuilder
+public abstract class StatementBuilder : IDisposable
 {
 
+    protected SqlConnection connection;
+
+    public StatementBuilder(SqlConnection connection)
+    {
+        this.connection = connection;
+    }
+
+    public static StatementBuilder GetInstance(string sourceMode, SqlConnection connection)
+    {
+        if (sourceMode.Equals("DB", StringComparison.CurrentCultureIgnoreCase))
+        {
+            return new DbSourcedStatementBuilder(connection);
+        }
+        if (sourceMode.Equals("CSV", StringComparison.CurrentCultureIgnoreCase))
+        {
+            return new CsvSourcedStatementBuilder(connection);
+        }
+        throw new ArgumentException("Source mode should be 'DB' or 'CSV'");
+    }
+
     //This is a hack to solve a very specific problem, could probably be generalized to the parameters
-    public static readonly HashSet<(string, string)> sensitiveColumns = new HashSet<(string, string)>{
+    public readonly HashSet<(string, string)> sensitiveColumns = new HashSet<(string, string)>{
         ("CoatingComponent", "CoatingComponentDescription")
     };
 
-    public static IEnumerable<ColumnInfo> GetColumnInfo(string table, SqlConnection connection)
+    public IEnumerable<ColumnInfo> GetColumnInfo(string table)
     {
 
         string sql = @"
@@ -35,32 +55,15 @@ public static class StatementBuilder
         return results;
     }
 
-    public static string GetSelectStatement(string table, IEnumerable<ColumnInfo> columnInfos, SqlConnection connection)
-    {
-        bool first = true;
-        StringBuilder sb = new();
-        sb.Append("select ");
-        foreach (ColumnInfo columnInfo in columnInfos)
-        {
-            if (first)
-            {
-                first = false;
-            }
-            else
-            {
-                sb.Append(", ");
-            }
-            sb.Append(columnInfo.ColumnName);
-        }
-        sb.Append($" from {table}");
-        return sb.ToString();
-    }
+    public abstract void Initialize(string tableName, IEnumerable<ColumnInfo> columnInfos);
+    public abstract bool GetNext();
+    public abstract bool IsNull(string columnName);
+    public abstract object GetValue(string columnName);
 
-    public static IEnumerable<string> GetInsertStatements(string table, string selectStatement, IEnumerable<ColumnInfo> columnInfos, SqlConnection connection)
+    public IEnumerable<string> GetInsertStatements(string table, IEnumerable<ColumnInfo> columnInfos)
     {
-        using SqlCommand cmd = new(selectStatement, connection);
-        using SqlDataReader reader = cmd.ExecuteReader();
-        while (reader.Read())
+        Initialize(table, columnInfos);
+        while (GetNext())
         {
             StringBuilder sb = new();
             sb.Append("insert ");
@@ -91,8 +94,7 @@ public static class StatementBuilder
                 {
                     sb.Append(", ");
                 }
-                int columnIndex = reader.GetOrdinal(columnInfo.ColumnName);
-                if (reader.IsDBNull(columnIndex))
+                if (IsNull(columnInfo.ColumnName))
                 {
                     if (!columnInfo.IsNullable)
                     {
@@ -102,7 +104,8 @@ public static class StatementBuilder
                 }
                 else
                 {
-                    object value = reader[columnInfo.ColumnName];
+                    //object value = reader[columnInfo.ColumnName];
+                    object value = GetValue(columnInfo.ColumnName);
                     if (columnInfo.DataType == typeof(string))
                     {
                         sb.Append("'");
@@ -136,5 +139,7 @@ public static class StatementBuilder
             yield return sb.ToString();
         }
     }
+
+    public abstract void Dispose();
 
 }
