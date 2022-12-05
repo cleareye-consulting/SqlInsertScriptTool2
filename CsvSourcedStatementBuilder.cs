@@ -16,6 +16,10 @@ public class CsvSourcedStatementBuilder : StatementBuilder
 
     private static string Dequote(string input)
     {
+        if (input.Length == 0)
+        {
+            return string.Empty;
+        }
         if (input[0] == '"' && input[input.Length - 1] == '"')
         {
             return input.Substring(1, input.Length - 2);
