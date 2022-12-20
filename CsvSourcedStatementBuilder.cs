@@ -14,23 +14,14 @@ public class CsvSourcedStatementBuilder : StatementBuilder
 
     public string? CSVDirectoryPath { get; set; }
 
-    private static string Dequote(string input)
-    {
-        if (input.Length == 0)
-        {
-            return string.Empty;
-        }
-        if (input[0] == '"' && input[input.Length - 1] == '"')
-        {
-            return input.Substring(1, input.Length - 2);
-        }
-        return input;
-    }
-
     private static string[]? GetStringValues(TextReader reader)
     {
         string? line = reader.ReadLine();
-        return line?.Split(',').Select(s => Dequote(s)).ToArray();
+        if (line is null)
+        {
+            return null;
+        }
+        return Utilities.SplitCSVLine(line).ToArray();
     }
 
     public override void Initialize(string tableName, IEnumerable<ColumnInfo> columnInfos)

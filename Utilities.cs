@@ -4,42 +4,55 @@ using System.Text.RegularExpressions;
 static class Utilities
 {
 
-    private static Regex flagPattern = new(@"^--(\p{Ll}\p{L}+)$");
+    private static readonly Regex flagPattern = new(@"^-{1,2}(\p{Ll}\p{L}*)$");
 
     public static T? GetCommandLineArgs<T>(string[] args)
     {
-        if (args.Length == 0)
-        {
-            return default;
-        }
-        if (args.Length % 2 != 0)
-        {
-            throw new ArgumentException($"Number of args must be even. {args.Length} arguments provided.");
-        }
         ConstructorInfo? ctor = typeof(T).GetConstructor(System.Type.EmptyTypes);
         if (ctor is null)
         {
             throw new InvalidOperationException("Generic type being created must have a zero-parameter constructor");
         }
         T result = (T)ctor.Invoke(new object[0]);
-        int argIndex = 0;
-        while (argIndex < args.Length)
+        foreach (PropertyInfo prop in typeof(T).GetProperties(BindingFlags.Instance | BindingFlags.Public))
         {
-            string flag = args[argIndex++];
-            Match flagMatch = flagPattern.Match(flag);
-            if (!flagMatch.Success)
+            ArgumentInfoAttribute? argumentInfo = prop.GetCustomAttribute<ArgumentInfoAttribute>();
+            int flagIndex = Array.IndexOf(args, $"--{LowerCaseInitialLetter(prop.Name)}");
+            if (flagIndex == -1 && argumentInfo?.Alias is not null) 
             {
-                throw new ArgumentException("Odd-numbered arguments must be camel-cased identifiers prefixed with --", nameof(args));
+                flagIndex = Array.IndexOf(args, $"-{argumentInfo?.Alias}");
             }
-            string key = UpperCaseInitialLetter(flagMatch.Groups[1].Value);
-            string valueAsString = args[argIndex++];
-            PropertyInfo? prop = typeof(T).GetProperty(key);
-            if (prop is null)
+            if (flagIndex == -1)
             {
-                throw new ArgumentException($"Argument {key} doesn't have a corresponding property in type {typeof(T).Name}", nameof(args));
+                if (argumentInfo?.IsRequired ?? false)
+                {
+                    if (argumentInfo?.PromptIfMissing ?? false)
+                    {
+                        object? inputValue = GetInputFromConsole(prop.Name, argumentInfo?.IsSecret ?? false);
+                        prop.SetValue(result, inputValue);
+                        continue;
+                    }
+                    else
+                    {
+                        throw new ArgumentException($"Unable to find argument for property {prop.Name}");
+                    }
+                }
+                else
+                {
+                    continue;
+                }
             }
-            object? value = TryConvert(valueAsString, prop.PropertyType);
-            prop.SetValue(result, value);
+            List<string> inputValues = new();
+            for (int i = flagIndex + 1; i < args.Length; i++)
+            {
+                if (args[i][0] == '-')
+                {
+                    break;
+                }
+                inputValues.Add(args[i]);
+            }
+            object? argumentValue = TryConvert(inputValues.ToArray(), prop.PropertyType);
+            prop.SetValue(result, argumentValue);
         }
         return result;
     }
@@ -56,9 +69,19 @@ static class Utilities
         return new string(result);
     }
 
-    public static string GetPasswordFromConsole()
+    private static string LowerCaseInitialLetter(string input)
     {
-        Console.Write("Password: ");
+        return char.ToLower(input[0]) + input.Substring(1);
+    }
+
+    public static string GetInputFromConsole(string prompt, bool isSecret)
+    {
+        Console.Write($"{prompt}: ");
+        return isSecret ? ReadHiddenInputFromConsole() : (Console.ReadLine() ?? "");
+    }
+
+    public static string ReadHiddenInputFromConsole()
+    {
         ConsoleKey key;
         Stack<char> inputs = new();
         do
@@ -78,19 +101,36 @@ static class Utilities
         return new string(inputs.Reverse().ToArray());
     }
 
-    private static object? TryConvert(string input, Type type)
+    public static string GetPasswordFromConsole()
     {
-        if (input is null)
+        return GetInputFromConsole("Password", true);
+    }
+
+    private static object? TryConvert(string[] inputs, Type type)
+    {
+        if (inputs is null)
         {
             return null;
         }
-        if (type == typeof(string))
+        if (inputs.Length == 0)
         {
-            return input;
+            if (type == typeof(bool))
+            {
+                return true; //a boolean flag with no specified value is assumed to be true
+            }
+            return null;
         }
         if (type == typeof(string[]))
         {
-            return input.Split(',');
+            return inputs;
+        }
+        if (inputs.Length > 1)
+        {
+            throw new ArgumentException("Input should be a single value unless the property type is string[]", nameof(inputs));
+        }
+        if (type == typeof(string))
+        {
+            return inputs[0];
         }
         //Is this a hack? Yeah, probably.
         MethodInfo? parseMethod = type.GetMethod("Parse", BindingFlags.Static | BindingFlags.Public, new[] { typeof(string) });
@@ -98,8 +138,76 @@ static class Utilities
         {
             throw new ArgumentException("Type must have a public static Parse method that accepts a string argument", nameof(type));
         }
-        object? result = parseMethod.Invoke(null, new[] { input });
+        object? result = parseMethod.Invoke(null, new[] { inputs[0] });
         return result;
+    }
+
+    public static void WriteUsage<T>(TextWriter writer)
+    {
+        PropertyInfo[] properties = typeof(T).GetProperties(BindingFlags.Instance | BindingFlags.Public);
+        writer.WriteLine("The following properties are defined:");
+        foreach (PropertyInfo property in properties)
+        {
+            ArgumentInfoAttribute? info = property.GetCustomAttribute<ArgumentInfoAttribute>();
+            writer.Write($"\t--{LowerCaseInitialLetter(property.Name)}");
+            if (info is not null)
+            {
+                writer.Write($" (or -{info.Alias})");
+            }
+            writer.WriteLine();
+        }
+    }
+
+    public static IEnumerable<string> SplitCSVLine(string line)
+    {
+        char[] buffer = new char[256];
+        int bufferIndex = 0;
+        List<string> results = new();
+        int lineIndex = 0;
+        bool isInsideQuotes = false;
+        var acceptResult = () =>
+        {
+            string value = new(buffer, 0, bufferIndex);
+            results.Add(value);
+            Array.Clear(buffer);
+            bufferIndex = 0;
+
+        };
+        while (true)
+        {
+            char c = line[lineIndex++];
+            if (bufferIndex == 0)
+            {
+                if (c == '"')
+                {
+                    isInsideQuotes = true;
+                }
+                else
+                {
+                    buffer[bufferIndex++] = c;
+                }
+            }
+            else if (c == ',' && !isInsideQuotes)
+            {
+                acceptResult();
+            }
+            else if (c == '"' && isInsideQuotes)
+            {
+                acceptResult();
+                lineIndex += 1;
+                isInsideQuotes = false;
+            }
+            else
+            {
+                buffer[bufferIndex++] = c;
+            }
+            if (lineIndex == line.Length)
+            {
+                acceptResult();
+                break;
+            }
+        }
+        return results;
     }
 
 }
