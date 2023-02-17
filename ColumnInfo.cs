@@ -19,4 +19,5 @@ public record ColumnInfo
         _ => typeof(object)
     };
     public bool IsNullable { get; init; } = true;
+    public bool IsIdentity { get; init; } = false;
 }

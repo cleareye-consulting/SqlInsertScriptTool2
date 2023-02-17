@@ -9,6 +9,7 @@ public class CsvSourcedStatementBuilder : StatementBuilder
     private IDictionary<string, ColumnInfo>? columnInfoTable;
     private IDictionary<string, int>? csvColumnIndices;
     private string[]? currentRowValues;
+    private bool rereadNeeded = false;
 
     public CsvSourcedStatementBuilder(SqlConnection connection) : base(connection) { }
 
@@ -39,10 +40,26 @@ public class CsvSourcedStatementBuilder : StatementBuilder
             throw new InvalidOperationException("Unable to read first line from file");
         }
         csvColumnIndices = new Dictionary<string, int>();
-        for (int i = 0; i < firstLineValues.Length; i++)
+        if (firstLineValues.All(v => columnInfos.Any(ci => ci.ColumnName == v)))
         {
-            csvColumnIndices[firstLineValues[i]] = i;
+            //The CSV has the column headers in the first line
+            for (int i = 0; i < firstLineValues.Length; i++)
+            {
+                csvColumnIndices[firstLineValues[i]] = i;
+            }
         }
+        else
+        {
+            //The first line is data
+            int i = 0;
+            currentRowValues = firstLineValues;
+            rereadNeeded = true;
+            foreach (ColumnInfo columnInfo in columnInfos)
+            {
+                csvColumnIndices[columnInfo.ColumnName] = i++;
+            }
+        }
+
     }
 
     public override bool GetNext()
@@ -51,7 +68,14 @@ public class CsvSourcedStatementBuilder : StatementBuilder
         {
             throw new InvalidOperationException("Reader not initialized");
         }
-        currentRowValues = GetStringValues(reader);
+        if (rereadNeeded)
+        { //this is just so that we can serve the first line when the first line is data and not headers
+            rereadNeeded = false;
+        }
+        else
+        {
+            currentRowValues = GetStringValues(reader);
+        }
         return currentRowValues is not null;
     }
 
@@ -103,7 +127,8 @@ public class CsvSourcedStatementBuilder : StatementBuilder
             "tinyint" => byte.Parse(stringValue),
             "float" => double.Parse(stringValue),
             "real" => typeof(float),
-            "datetime" or "datetime2" or "smalldatetime" => DateTime.ParseExact(stringValue, "yyyy-MM-dd HH:mm:ss.fff", CultureInfo.CurrentCulture),
+            "datetime" or "smalldatetime" => DateTime.ParseExact(stringValue, "yyyy-MM-dd HH:mm:ss.fff", CultureInfo.CurrentCulture),
+            "datetime2" => DateTime.ParseExact(stringValue, "yyyy-MM-dd HH:mm:ss.fffffff", CultureInfo.CurrentCulture),
             "date" => throw new NotSupportedException("DateOnly not supported"),
             "time" => throw new NotSupportedException("TimeOnly not supported"),
             "char" or "varchar" or "text" or "nchar" or "nvarchar" or "ntext" => stringValue,

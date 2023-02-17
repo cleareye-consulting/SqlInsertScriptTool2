@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 
 public abstract class StatementBuilder : IDisposable
@@ -33,7 +34,7 @@ public abstract class StatementBuilder : IDisposable
     {
 
         string sql = @"
-            select COLUMN_NAME, DATA_TYPE, IS_NULLABLE
+            select COLUMN_NAME, DATA_TYPE, IS_NULLABLE, columnproperty(object_id(@tableName),COLUMN_NAME,'IsIdentity') as IS_IDENTITY
             from INFORMATION_SCHEMA.COLUMNS 
             where TABLE_NAME = @tableName 
             order by ORDINAL_POSITION";
@@ -48,7 +49,8 @@ public abstract class StatementBuilder : IDisposable
             {
                 ColumnName = (string)reader["COLUMN_NAME"],
                 DataTypeName = (string)reader["DATA_TYPE"],
-                IsNullable = (string)reader["IS_NULLABLE"] == "YES"
+                IsNullable = (string)reader["IS_NULLABLE"] == "YES",
+                IsIdentity = (int)reader["IS_IDENTITY"] == 1
             };
             results.Add(result);
         }
@@ -60,9 +62,16 @@ public abstract class StatementBuilder : IDisposable
     public abstract bool IsNull(string columnName);
     public abstract object GetValue(string columnName);
 
+    private static readonly Regex dateSplitterPattern = new(@"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.)(\d{3})(\d{4})$");
+
     public IEnumerable<string> GetInsertStatements(string table, IEnumerable<ColumnInfo> columnInfos)
     {
         Initialize(table, columnInfos);
+        bool hasIdentity = columnInfos.Any(ci => ci.IsIdentity);
+        if (hasIdentity)
+        {
+            yield return $"set identity_insert {table} on";
+        }
         while (GetNext())
         {
             StringBuilder sb = new();
@@ -122,7 +131,13 @@ public abstract class StatementBuilder : IDisposable
                     else if (columnInfo.DataType == typeof(DateTime))
                     {
                         sb.Append("'");
-                        sb.Append(((DateTime)value).ToString("s"));
+                        string formattedDate = ((DateTime)value).ToString("O");
+                        Match parts = dateSplitterPattern.Match(formattedDate);
+                        if (parts.Groups[3].Value == "0000")
+                        {
+                            formattedDate = parts.Groups[1].Value + parts.Groups[2].Value;
+                        }
+                        sb.Append(formattedDate);
                         sb.Append("'");
                     }
                     else if (columnInfo.DataType == typeof(bool))
@@ -137,6 +152,10 @@ public abstract class StatementBuilder : IDisposable
             }
             sb.Append(")");
             yield return sb.ToString();
+        }
+        if (hasIdentity)
+        {
+            yield return $"set identity_insert {table} off";
         }
     }
 
