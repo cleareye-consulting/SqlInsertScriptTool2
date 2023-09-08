@@ -62,6 +62,11 @@ public abstract class StatementBuilder : IDisposable
     public abstract bool IsNull(string columnName);
     public abstract object GetValue(string columnName);
 
+    public virtual void FinalizeTable()
+    {
+        //no-op
+    }
+
     private static readonly Regex dateSplitterPattern = new(@"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.)(\d{3})(\d{4})$");
 
     public IEnumerable<string> GetInsertStatements(string table, IEnumerable<ColumnInfo> columnInfos)
@@ -157,6 +162,7 @@ public abstract class StatementBuilder : IDisposable
         {
             yield return $"set identity_insert {table} off";
         }
+        FinalizeTable();
     }
 
     public abstract void Dispose();

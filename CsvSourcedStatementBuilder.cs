@@ -34,11 +34,7 @@ public class CsvSourcedStatementBuilder : StatementBuilder
         columnInfoTable = columnInfos.ToDictionary(ci => ci.ColumnName);
         string statement = GetSelectStatement(tableName, columnInfos);
         reader = new StreamReader(Path.Combine(CSVDirectoryPath, $"{tableName}.csv"));
-        string[]? firstLineValues = GetStringValues(reader);
-        if (firstLineValues is null)
-        {
-            throw new InvalidOperationException("Unable to read first line from file");
-        }
+        string[]? firstLineValues = GetStringValues(reader) ?? throw new InvalidOperationException("Unable to read first line from file");
         csvColumnIndices = new Dictionary<string, int>();
         if (firstLineValues.All(v => columnInfos.Any(ci => ci.ColumnName == v)))
         {
@@ -59,7 +55,6 @@ public class CsvSourcedStatementBuilder : StatementBuilder
                 csvColumnIndices[columnInfo.ColumnName] = i++;
             }
         }
-
     }
 
     public override bool GetNext()

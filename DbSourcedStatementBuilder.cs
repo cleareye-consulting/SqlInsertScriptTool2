@@ -16,6 +16,12 @@ public class DbSourcedStatementBuilder : StatementBuilder
         reader = command.ExecuteReader();
     }
 
+    public override void FinalizeTable()
+    {
+        command?.Dispose();
+        reader?.Close();
+    }
+
     public override bool GetNext()
     {
         if (reader is null)
