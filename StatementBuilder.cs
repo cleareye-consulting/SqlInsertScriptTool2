@@ -77,8 +77,10 @@ public abstract class StatementBuilder : IDisposable
         {
             yield return $"set identity_insert {table} on";
         }
+        int rowNumber = 0;
         while (GetNext())
         {
+            rowNumber += 1;
             StringBuilder sb = new();
             sb.Append("insert ");
             sb.Append(table);
@@ -118,11 +120,19 @@ public abstract class StatementBuilder : IDisposable
                 }
                 else
                 {
-                    //object value = reader[columnInfo.ColumnName];
-                    object value = GetValue(columnInfo.ColumnName);
+                    object? value = null;
+                    try
+                    {
+                        value = GetValue(columnInfo.ColumnName);
+                    }
+                    catch
+                    {
+                        Console.WriteLine($"Error reading value in table {table}, row {rowNumber}, column {columnInfo.ColumnName}");
+                        throw;
+                    }
                     if (columnInfo.DataType == typeof(string))
                     {
-                        sb.Append("'");
+                        sb.Append('\'');
                         if (sensitiveColumns.Contains((table, columnInfo.ColumnName)))
                         {
                             sb.Append("OBFUSCATED");
@@ -131,11 +141,11 @@ public abstract class StatementBuilder : IDisposable
                         {
                             sb.Append(((string)value).Replace("'", "''"));
                         }
-                        sb.Append("'");
+                        sb.Append('\'');
                     }
                     else if (columnInfo.DataType == typeof(DateTime))
                     {
-                        sb.Append("'");
+                        sb.Append('\'');
                         string formattedDate = ((DateTime)value).ToString("O");
                         Match parts = dateSplitterPattern.Match(formattedDate);
                         if (parts.Groups[3].Value == "0000")
@@ -143,7 +153,7 @@ public abstract class StatementBuilder : IDisposable
                             formattedDate = parts.Groups[1].Value + parts.Groups[2].Value;
                         }
                         sb.Append(formattedDate);
-                        sb.Append("'");
+                        sb.Append('\'');
                     }
                     else if (columnInfo.DataType == typeof(bool))
                     {
@@ -155,7 +165,7 @@ public abstract class StatementBuilder : IDisposable
                     }
                 }
             }
-            sb.Append(")");
+            sb.Append(')');
             yield return sb.ToString();
         }
         if (hasIdentity)

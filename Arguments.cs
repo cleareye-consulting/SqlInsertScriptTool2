@@ -12,11 +12,11 @@ public class Arguments
     [ArgumentInfo(alias: "u", isRequired: true)]
     public string UserId { get; set; } = "";
 
-    [ArgumentInfo(alias: "p", isRequired: true, promptIfMissing:true, isSecret: true)]
+    [ArgumentInfo(alias: "p", isRequired: true, promptIfMissing: true, isSecret: true)]
     public string Password { get; set; } = "";
 
-    [ArgumentInfo(alias: "t", isRequired: true, description: "Comma-separated list of tables to generate statements for")]
-    public string[] Tables { get; set; } = new string[0];
+    [ArgumentInfo(alias: "t", isRequired: false, description: "Comma-separated list of tables to generate statements for")]
+    public string[] Tables { get; set; } = Array.Empty<string>();
 
     [ArgumentInfo(alias: "incdel", isRequired: false)]
     public bool IncludeDeletes { get; set; }

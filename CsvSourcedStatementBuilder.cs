@@ -22,7 +22,15 @@ public class CsvSourcedStatementBuilder : StatementBuilder
         {
             return null;
         }
-        return Utilities.SplitCSVLine(line).ToArray();
+        try
+        {
+            return Utilities.SplitCSVLine(line).ToArray();
+        }
+        catch
+        {
+            Console.WriteLine($"Error splitting line '{line}'");
+            throw;
+        }
     }
 
     public override void Initialize(string tableName, IEnumerable<ColumnInfo> columnInfos)
@@ -88,8 +96,16 @@ public class CsvSourcedStatementBuilder : StatementBuilder
         {
             throw new InvalidOperationException("CSV column indices not loaded");
         }
-        string stringValue = currentRowValues[csvColumnIndices[columnName]];
-        return stringValue == "NULL"; //Assumes that the data was exported from SSMS or similar
+        try
+        {
+            string stringValue = currentRowValues[csvColumnIndices[columnName]];
+            return stringValue == "NULL"; //Assumes that the data was exported from SSMS or similar
+        }
+        catch
+        {
+            Console.WriteLine($"Error checking for null in column {columnName}, currentRowValues is {string.Join(',', currentRowValues)}");
+            throw;
+        }
     }
 
     public override object GetValue(string columnName)

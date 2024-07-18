@@ -8,17 +8,13 @@ static class Utilities
 
     public static T? GetCommandLineArgs<T>(string[] args)
     {
-        ConstructorInfo? ctor = typeof(T).GetConstructor(System.Type.EmptyTypes);
-        if (ctor is null)
-        {
-            throw new InvalidOperationException("Generic type being created must have a zero-parameter constructor");
-        }
-        T result = (T)ctor.Invoke(new object[0]);
+        ConstructorInfo? ctor = typeof(T).GetConstructor(System.Type.EmptyTypes) ?? throw new InvalidOperationException("Generic type being created must have a zero-parameter constructor");
+        T result = (T)ctor.Invoke(Array.Empty<object>());
         foreach (PropertyInfo prop in typeof(T).GetProperties(BindingFlags.Instance | BindingFlags.Public))
         {
             ArgumentInfoAttribute? argumentInfo = prop.GetCustomAttribute<ArgumentInfoAttribute>();
             int flagIndex = Array.IndexOf(args, $"--{LowerCaseInitialLetter(prop.Name)}");
-            if (flagIndex == -1 && argumentInfo?.Alias is not null) 
+            if (flagIndex == -1 && argumentInfo?.Alias is not null)
             {
                 flagIndex = Array.IndexOf(args, $"-{argumentInfo?.Alias}");
             }
@@ -165,14 +161,14 @@ static class Utilities
         List<string> results = new();
         int lineIndex = 0;
         bool isInsideQuotes = false;
-        var acceptResult = () =>
+        void acceptResult()
         {
             string value = new(buffer, 0, bufferIndex);
             results.Add(value);
             Array.Clear(buffer);
             bufferIndex = 0;
 
-        };
+        }
         while (true)
         {
             char c = line[lineIndex++];

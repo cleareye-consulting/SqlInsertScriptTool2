@@ -26,9 +26,17 @@ internal class Program
         using SqlConnection cn = new(connectionStringBuilder.ConnectionString);
         cn.Open();
 
+        IEnumerable<string> tables =
+            arguments.Tables.Any()
+            ? arguments.Tables
+            : (
+                (arguments.SourceMode == "CSV" && arguments.CsvDirectory != null)
+                ? GetTableNamesFromCsvDir(arguments.CsvDirectory)
+                : throw new ArgumentException("Tables not specified and can't be determined from directory"));
+
         if (arguments.IncludeDeletes)
         {
-            foreach (string table in arguments.Tables.Reverse())
+            foreach (string table in tables.Reverse())
             {
                 Console.WriteLine($"delete {table}");
             }
@@ -41,7 +49,7 @@ internal class Program
             csvBuilder.CSVDirectoryPath = arguments.CsvDirectory; //This is a little hacky but simpler than the alternatives, I think
         }
 
-        foreach (string table in arguments.Tables)
+        foreach (string table in tables)
         {
             IEnumerable<ColumnInfo> columnInfos = builder.GetColumnInfo(table);
             foreach (string insertStatement in builder.GetInsertStatements(table, columnInfos))
@@ -50,4 +58,12 @@ internal class Program
             }
         }
     }
+
+    private static IEnumerable<string> GetTableNamesFromCsvDir(string csvDir)
+    {
+        Console.WriteLine($"csvDir {csvDir}");
+        DirectoryInfo directoryInfo = new(csvDir);
+        return directoryInfo.GetFiles().Select(fi => Path.GetFileNameWithoutExtension(fi.Name));
+    }
+
 }
